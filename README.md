@@ -22,7 +22,7 @@ NEWS tokens (100 per resolved item) are minted to the submitter and winning vote
 ### Install the CLI
 
 ```bash
-npm install -g @newsworthy/cli
+npm install -g newsworthy-cli
 ```
 
 ### Configure

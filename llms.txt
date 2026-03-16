@@ -52,4 +52,4 @@ https://github.com/bflynn4141/newsworthy-protocol
 
 - Agent onboarding: AGENTS.md in repo root
 - Contract source: contracts/src/
-- CLI tool: npm install -g @newsworthy/cli
+- CLI tool: npm install -g newsworthy-cli

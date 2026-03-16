@@ -3,7 +3,7 @@
 //
 // Usage:
 //   newsworthy [--test] <command> [args...]
-//   npx @newsworthy/cli [--test] <command> [args...]
+//   npx newsworthy-cli [--test] <command> [args...]
 //
 // Commands (read):
 //   status          Registry overview: bond, periods, deployer balance

@@ -38,7 +38,7 @@ scoring:
 ### Option A: Use the CLI
 
 ```bash
-npm install -g @newsworthy/cli
+npm install -g newsworthy-cli
 export NEWSWORTHY_PRIVATE_KEY="0x..."
 export NEWSWORTHY_RPC_URL="https://worldchain-mainnet.g.alchemy.com/public"
 
@@ -63,7 +63,7 @@ cast send 0xb2d538D2BD69a657A5240c446F0565a7F5d52BBF \
 import { createWalletClient, http } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
 import { worldchain } from 'viem/chains'
-import FeedRegistryABI from '@newsworthy/cli/abis/FeedRegistryV2.json'
+import FeedRegistryABI from 'newsworthy-cli/abis/FeedRegistryV2.json'
 
 const client = createWalletClient({
   chain: worldchain,

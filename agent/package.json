@@ -1,5 +1,5 @@
 {
-  "name": "@newsworthy/cli",
+  "name": "newsworthy-cli",
   "version": "0.1.0",
   "type": "module",
   "description": "CLI for interacting with the Newsworthy protocol on World Chain",

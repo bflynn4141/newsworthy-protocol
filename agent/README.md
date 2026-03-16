@@ -1,11 +1,11 @@
-# @newsworthy/cli
+# newsworthy-cli
 
 Command-line tool for interacting with the Newsworthy protocol on World Chain.
 
 ## Install
 
 ```bash
-npm install -g @newsworthy/cli
+npm install -g newsworthy-cli
 ```
 
 ## Configure
