@@ -14,6 +14,7 @@
 //   dashboard       Live TUI dashboard (auto-refreshing, requires Node)
 //
 // Commands (write — costs gas):
+//   approve                 Max-approve USDC for the registry (one-shot)
 //   submit <url> [meta]     Submit news item with bond
 //   vote <id> <keep|remove> Vote on a voting item
 //   resolve <id>            Resolve an item after voting period
@@ -354,6 +355,8 @@ async function cmdRegister(
 
   // 4. Create registration session via API
   let sessionId: string
+  let sessionExpiresAt: number | null = null // epoch ms
+  const sessionCreatedAt = Date.now()
   try {
     const res = await fetch(`${API_BASE}/register/session`, {
       method: 'POST',
@@ -364,30 +367,44 @@ async function cmdRegister(
       const body = await res.text()
       die(`Failed to create registration session: ${res.status} ${body}`)
     }
-    const data = (await res.json()) as { sessionId: string }
+    const data = (await res.json()) as { sessionId: string; expiresAt?: string | number }
     sessionId = data.sessionId
+    if (data.expiresAt) {
+      sessionExpiresAt = typeof data.expiresAt === 'number'
+        ? data.expiresAt * (data.expiresAt < 1e12 ? 1000 : 1) // handle seconds vs ms
+        : new Date(data.expiresAt).getTime()
+    }
   } catch (err: any) {
     die(`Failed to create registration session: ${err?.message ?? String(err)}`)
   }
 
-  console.log(`  Session: ${DIM}${sessionId}${RESET}\n`)
+  // Show session ID with expiry info
+  const sessionDeadline = sessionExpiresAt ?? (sessionCreatedAt + 15 * 60 * 1000) // fallback: 15m
+  const expiryDeltaSec = Math.max(0, Math.floor((sessionDeadline - Date.now()) / 1000))
+  console.log(`  Session: ${DIM}${sessionId}${RESET} (expires in ${formatDuration(expiryDeltaSec)})\n`)
 
   // 5. Build verification URL and display QR code
   const miniAppPath = encodeURIComponent(`/mini/register-cli?session=${sessionId}`)
   const verifyUrl = `https://world.org/mini-app?app_id=app_1325590145579e6d6df0809d48040738&path=${miniAppPath}`
 
-  console.log(`  ${BOLD}Scan this QR code with World App to verify:${RESET}\n`)
+  if (process.stdout.isTTY) {
+    // Interactive terminal — show QR code + URL
+    console.log(`  ${BOLD}Scan this QR code with World App to verify:${RESET}\n`)
 
-  // qrcode-terminal with callback to capture output
-  await new Promise<void>((resolve) => {
-    qrcode.generate(verifyUrl, { small: true }, (qr: string) => {
-      console.log(qr)
-      resolve()
+    await new Promise<void>((resolve) => {
+      qrcode.generate(verifyUrl, { small: true }, (qr: string) => {
+        console.log(qr)
+        resolve()
+      })
     })
-  })
 
-  console.log(`\n  ${DIM}Or open this URL:${RESET}`)
-  console.log(`  ${verifyUrl}\n`)
+    console.log(`\n  ${DIM}Or open this URL:${RESET}`)
+    console.log(`  ${verifyUrl}\n`)
+  } else {
+    // Non-TTY (piped, headless agent, CI) — QR codes are unreadable, just show URL
+    console.log(`  ${BOLD}Open this URL in World App to verify:${RESET}`)
+    console.log(`  ${verifyUrl}\n`)
+  }
 
   // 6. Poll for completion (every 3s, up to 15 minutes = 300 iterations)
   const MAX_POLLS = 300
@@ -396,7 +413,8 @@ async function cmdRegister(
   let sessionData: { status: string; proofData?: { merkle_root: string; nullifier_hash: string; proof: string } } | null = null
 
   for (let poll = 1; poll <= MAX_POLLS; poll++) {
-    process.stdout.write(`\r  ⏳ Waiting for World ID verification... (poll ${poll}/${MAX_POLLS})`)
+    const remainingSec = Math.max(0, Math.floor((sessionDeadline - Date.now()) / 1000))
+    process.stdout.write(`\r  ⏳ Waiting for World ID verification... (${formatDuration(remainingSec)} remaining)   `)
 
     try {
       const res = await fetch(`${API_BASE}/register/session/${sessionId}`)
@@ -512,7 +530,26 @@ async function cmdVote(
 ) {
   const walletClient = await getWalletClient(rpcUrl)
 
+  const [voteCost, bondToken] = await Promise.all([
+    client.readContract({ address: registryAddr, abi: FEED_REGISTRY_ABI, functionName: 'voteCost' }) as Promise<bigint>,
+    client.readContract({ address: registryAddr, abi: FEED_REGISTRY_ABI, functionName: 'bondToken' }) as Promise<Address>,
+  ])
+
+  // Ensure approval
+  const allowance = await client.readContract({
+    address: bondToken, abi: ERC20_ABI, functionName: 'allowance',
+    args: [walletClient.account!.address, registryAddr],
+  }) as bigint
+  if (allowance < voteCost) {
+    console.log(`Approving USDC for registry...`)
+    await walletClient.writeContract({
+      address: bondToken, abi: ERC20_ABI, functionName: 'approve',
+      args: [registryAddr, 2n ** 256n - 1n],
+    })
+  }
+
   console.log(`\nVoting ${support ? '\x1b[32mKEEP\x1b[0m' : '\x1b[31mREMOVE\x1b[0m'} on item #${itemId}`)
+  console.log(`Vote cost: ${formatUnits(voteCost, 6)} USDC`)
 
   const hash = await walletClient.writeContract({
     address: registryAddr, abi: FEED_REGISTRY_ABI, functionName: 'vote',
@@ -520,6 +557,43 @@ async function cmdVote(
   })
 
   console.log(`\x1b[32m✓\x1b[0m Vote cast: ${txLink(hash)}\n`)
+}
+
+async function cmdApprove(
+  client: PublicClient, rpcUrl: string, registryAddr: Address,
+) {
+  const walletClient = await getWalletClient(rpcUrl)
+
+  const bondToken = await client.readContract({
+    address: registryAddr, abi: FEED_REGISTRY_ABI, functionName: 'bondToken',
+  }) as Address
+
+  const [tokenSymbol, tokenDecimals] = await Promise.all([
+    client.readContract({ address: bondToken, abi: ERC20_ABI, functionName: 'symbol' }) as Promise<string>,
+    client.readContract({ address: bondToken, abi: ERC20_ABI, functionName: 'decimals' }) as Promise<number>,
+  ])
+
+  const allowance = await client.readContract({
+    address: bondToken, abi: ERC20_ABI, functionName: 'allowance',
+    args: [walletClient.account!.address, registryAddr],
+  }) as bigint
+
+  // Consider "already approved" if allowance > 1000 tokens (generous threshold)
+  const threshold = BigInt(1000) * (10n ** BigInt(tokenDecimals))
+  if (allowance >= threshold) {
+    console.log(`\n${GREEN}Already approved${RESET} — current allowance: ${formatUnits(allowance, tokenDecimals)} ${tokenSymbol}\n`)
+    return
+  }
+
+  console.log(`\nApproving ${tokenSymbol} for FeedRegistry...`)
+  console.log(`Current allowance: ${formatUnits(allowance, tokenDecimals)} ${tokenSymbol}`)
+
+  const hash = await walletClient.writeContract({
+    address: bondToken, abi: ERC20_ABI, functionName: 'approve',
+    args: [registryAddr, 2n ** 256n - 1n],
+  })
+
+  console.log(`\x1b[32m✓\x1b[0m Max approval set: ${txLink(hash)}\n`)
 }
 
 async function cmdResolve(
@@ -659,6 +733,7 @@ ${BOLD}Read commands:${RESET}
   dashboard           Live TUI dashboard (auto-refreshing)
 
 ${BOLD}Write commands:${RESET} (costs gas)
+  approve             Max-approve USDC for the registry (one-shot)
   submit <url> [meta] Submit item with bond
   vote <id> <keep|remove>  Vote on a voting item
   resolve <id>        Resolve an item after voting period
@@ -712,6 +787,10 @@ ${BOLD}Flags:${RESET}
 
       case 'register':
         await cmdRegister(client, agentBookAddr, deployer, writeRpcUrl, isTest)
+        break
+
+      case 'approve':
+        await cmdApprove(client, writeRpcUrl, registryAddr)
         break
 
       case 'submit': {
@@ -775,10 +854,33 @@ ${BOLD}Flags:${RESET}
         die(`Unknown command: ${command}. Run with --help to see available commands.`)
     }
   } catch (err: any) {
-    const errorName = err?.cause?.data?.errorName
+    // Viem puts custom error info at err.data.errorName or err.cause.data.errorName
+    const errorName = err?.data?.errorName ?? err?.cause?.data?.errorName
+
     if (errorName) {
+      const friendlyMessages: Record<string, string> = {
+        AlreadyVoted: 'You already voted on this item',
+        NotRegistered: "Your wallet is not registered in AgentBook. Run 'newsworthy register' first",
+        VotingPeriodExpired: 'Voting period has ended for this item',
+        VotingPeriodActive: 'Voting period is still active, cannot resolve yet',
+        DailyLimitReached: 'Daily submission limit reached (max 3 per human per day)',
+        SelfVote: 'Cannot vote on your own submission',
+        InvalidItemStatus: 'Item is not in the correct status for this action',
+        NothingToWithdraw: 'No pending USDC to withdraw',
+        AlreadyClaimed: 'Already claimed rewards for this item',
+        DuplicateUrl: 'This URL has already been submitted',
+        InvalidUrl: 'The provided URL is invalid',
+        NotAVoter: 'You did not vote on this item',
+        TransferFailed: 'USDC transfer failed — check your balance and approval',
+      }
+
+      const friendly = friendlyMessages[errorName]
+      if (friendly) {
+        die(`${friendly} (${errorName})`)
+      }
       die(`Contract reverted: ${errorName}`)
     }
+
     const reason = err?.shortMessage ?? err?.message ?? String(err)
     die(reason)
   }
