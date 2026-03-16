@@ -1,0 +1,46 @@
+{
+  "name": "@newsworthy/cli",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "CLI for interacting with the Newsworthy protocol on World Chain",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/bflynn4141/newsworthy-protocol",
+    "directory": "agent"
+  },
+  "bin": {
+    "newsworthy": "./dist/cli.js",
+    "newsworthy-curator": "./dist/curator.js"
+  },
+  "main": "./dist/curate.js",
+  "exports": {
+    ".": "./dist/curate.js",
+    "./abis/*": "../abis/*"
+  },
+  "files": [
+    "dist/",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "cli": "node --import tsx src/cli.ts",
+    "dashboard": "node --import tsx src/cli.ts dashboard",
+    "curate": "node --import tsx src/curator.ts"
+  },
+  "dependencies": {
+    "axios": "^1.13.6",
+    "ink": "^6.8.0",
+    "qrcode-terminal": "^0.12.0",
+    "react": "^19.2.4",
+    "viem": "^2.46.2"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.14",
+    "tsx": "^4.21.0",
+    "typescript": "^5.7.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

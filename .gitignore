@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+out/
+cache/
+broadcast/
+
+# Secrets
+.env
+.env.*
+.secrets/
+*.key
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Foundry
+contracts/out/
+contracts/cache/
+contracts/broadcast/
