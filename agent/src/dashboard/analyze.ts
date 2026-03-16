@@ -126,7 +126,9 @@ async function initX402() {
     const privateKey = (rawKey.startsWith('0x') ? rawKey : `0x${rawKey}`) as `0x${string}`
     const account = privateKeyToAccount(privateKey)
 
+    // @ts-expect-error — x402 is an optional dependency
     const { x402Client, x402HTTPClient } = await import('@x402/core/client')
+    // @ts-expect-error — x402 is an optional dependency
     const { ExactEvmScheme } = await import('@x402/evm/exact/client')
 
     const coreClient = x402Client.fromConfig({

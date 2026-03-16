@@ -236,7 +236,7 @@ export async function runCuratorLoop(
   const registryAddr = deployment.contracts.FeedRegistry.address as Address
   const agentBookAddr = deployment.contracts.AgentBook.address as Address
 
-  const client = createPublicClient({ chain: worldchain, transport: http(readRpc) })
+  const client = createPublicClient({ chain: worldchain, transport: http(readRpc) }) as PublicClient
   const key = await loadPrivateKey()
   const account = privateKeyToAccount(key)
   const walletClient = createWalletClient({ chain: worldchain, transport: http(writeRpc), account })
@@ -453,7 +453,7 @@ export async function runCuratorLoop(
 // ── CLI Entry Point ────────────────────────────────────────────────────────
 
 async function main() {
-  const argv = typeof globalThis.Bun !== 'undefined' ? (globalThis as any).Bun.argv.slice(2) : process.argv.slice(2)
+  const argv = typeof (globalThis as any).Bun !== 'undefined' ? (globalThis as any).Bun.argv.slice(2) : process.argv.slice(2)
   const { values } = parseArgs({
     args: argv,
     options: {

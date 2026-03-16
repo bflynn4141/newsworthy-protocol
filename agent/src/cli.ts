@@ -405,7 +405,7 @@ async function cmdRegister(
         await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS))
         continue
       }
-      sessionData = (await res.json()) as { status: string; proofData?: string }
+      sessionData = (await res.json()) as { status: string; proofData?: { merkle_root: string; nullifier_hash: string; proof: string } }
 
       if (sessionData.status === 'completed') {
         process.stdout.write('\r' + ' '.repeat(80) + '\r') // clear the polling line
@@ -424,14 +424,16 @@ async function cmdRegister(
     die('Session expired. Run `register` again.')
   }
 
-  if (!sessionData.proofData) {
+  const completedSession = sessionData as { status: string; proofData?: { merkle_root: string; nullifier_hash: string; proof: string } }
+
+  if (!completedSession.proofData) {
     die('Session completed but no proof data received.')
   }
 
   // 7. Parse proof and submit on-chain registration
   console.log(`  ${BOLD}Submitting on-chain registration...${RESET}`)
 
-  const proofData = sessionData.proofData!
+  const proofData = completedSession.proofData!
 
   // Decode the ABI-encoded uint256[8] proof
   const [decodedProof] = decodeAbiParameters(
@@ -629,7 +631,7 @@ async function cmdLeaderboard(
 // ── Main ────────────────────────────────────────────────────────────────────
 
 async function main() {
-  const argv = typeof globalThis.Bun !== 'undefined' ? Bun.argv.slice(2) : process.argv.slice(2)
+  const argv = typeof (globalThis as any).Bun !== 'undefined' ? (globalThis as any).Bun.argv.slice(2) : process.argv.slice(2)
   const { values, positionals } = parseArgs({
     args: argv,
     options: {
@@ -675,10 +677,11 @@ ${BOLD}Flags:${RESET}
   const rpcUrl = deployment.rpc
   const writeRpcUrl = deployment.writeRpc ?? rpcUrl
 
+  // Cast to generic PublicClient to avoid OP Stack transaction type mismatches
   const client = createPublicClient({
     chain: worldchain,
     transport: http(rpcUrl),
-  })
+  }) as PublicClient
 
   const registryAddr = deployment.contracts.FeedRegistry.address as Address
   const agentBookAddr = deployment.contracts.AgentBook.address as Address

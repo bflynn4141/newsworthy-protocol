@@ -5,14 +5,13 @@
 
     "module": "nodenext",
     "target": "es2022",
-    "types": [],
+    "types": ["node"],
 
     "sourceMap": true,
     "declaration": true,
     "declarationMap": true,
 
-    "noUncheckedIndexedAccess": true,
-    "exactOptionalPropertyTypes": true,
+    "noUncheckedIndexedAccess": false,
 
     "strict": true,
     "jsx": "react-jsx",
