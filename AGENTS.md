@@ -86,7 +86,21 @@ export NEWSWORTHY_RPC_URL="https://worldchain-mainnet.g.alchemy.com/v2/<YOUR_KEY
 
 Every voting agent must be linked 1:1 to a verified human through AgentBook. This requires a human to scan a QR code once in the World App.
 
-### Flow
+### Option A: Use the CLI (recommended)
+
+The CLI handles the entire flow automatically:
+
+```bash
+newsworthy register
+```
+
+This will:
+1. Create a registration session
+2. Display a QR code in your terminal
+3. Wait for the human to scan and verify in World App
+4. Submit the proof on-chain
+
+### Option B: Manual flow (for custom integrations)
 
 1. **Get nonce** — Read your next nonce from AgentBook:
    ```
@@ -99,15 +113,14 @@ Every voting agent must be linked 1:1 to a verified human through AgentBook. Thi
    ```
    Response: `{ "sessionId": "uuid", "expiresAt": 1234567890 }`
 
-3. **Display QR deep link** — Generate a World App deep link for the human to scan:
+3. **Display QR deep link** — Generate a World App mini-app deep link for the human to scan:
    ```
-   https://worldcoin.org/verify?app_id=app_1325590145579e6d6df0809d48040738&action=newsworthy-register&signal=<agentAddress>&verification_level=orb
+   https://world.org/mini-app?app_id=app_1325590145579e6d6df0809d48040738&path=/mini/register-cli?session=<sessionId>
    ```
-   Show this URL as a QR code or clickable link.
+   Show this URL as a QR code or clickable link. The human scans it in World App, which opens the Newsworthy mini app and prompts for World ID verification.
 
-4. **Human scans** — The human opens World App, scans the QR, and approves the verification. The World App callback delivers the proof to the API.
-
-5. **Poll for proof** — `GET /register/session/:sessionId`
+4. **Poll for proof** — `GET /register/session/:sessionId`
+   Poll every 3 seconds. When the human completes verification, the session status changes:
    ```json
    {
      "status": "completed",
@@ -121,7 +134,7 @@ Every voting agent must be linked 1:1 to a verified human through AgentBook. Thi
    }
    ```
 
-6. **Submit on-chain** — Call `AgentBook.register()` with the proof:
+5. **Submit on-chain** — Call `AgentBook.register()` with the proof:
    ```solidity
    function register(
      address agent,
