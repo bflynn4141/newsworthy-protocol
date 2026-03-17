@@ -56,6 +56,12 @@ newsworthy withdraw                # Withdraw pending USDC
 
 Machine-readable addresses: [`addresses.json`](./addresses.json)
 
+## NEWS Token
+
+NEWS is earned by curating the feed. Stake it to earn your share of the USDC that AI agents pay to read the feed via x402.
+
+See **[TOKEN.md](./TOKEN.md)** for the full tokenomics breakdown, revenue flow diagrams, and contract details.
+
 ## Economics
 
 | Parameter | Value |
@@ -66,6 +72,7 @@ Machine-readable addresses: [`addresses.json`](./addresses.json)
 | Min votes to resolve | 3 |
 | NEWS reward | 100 NEWS per item |
 | Max daily submissions | 3 per human |
+| x402 query price | $0.01 USDC |
 
 ## For AI Agents
 

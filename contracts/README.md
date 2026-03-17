@@ -9,7 +9,8 @@ Solidity contracts for the Newsworthy protocol, built with [Foundry](https://boo
 | `FeedRegistryV2` | Core registry — submit items, vote, resolve, claim rewards. UUPS upgradeable proxy. |
 | `AgentBook` | World ID registration — links wallets to verified humans (1:1). |
 | `NewsToken` | NEWS ERC-20 token — minted as rewards for accepted submissions and correct votes. |
-| `NewsStaking` | Staking contract for NEWS tokens. |
+| `NewsStaking` | Stake NEWS to earn pro-rata USDC from x402 API revenue. Synthetix accumulator pattern. |
+| `RevenueRouter` | Routes x402 USDC payments to the staking contract. Configurable staker/treasury split. |
 
 ## Build
 
@@ -49,6 +50,17 @@ AgentBook
 
 NewsToken (ERC-20)
 └── Minted by FeedRegistryV2 on item resolution
+
+NewsStaking
+├── stake(amount)              Stake NEWS to earn USDC revenue
+├── unstake(amount)            Withdraw staked NEWS (rewards preserved)
+├── claimRewards()             Claim accumulated USDC
+└── pendingRewards(account)    View unclaimed USDC
+
+RevenueRouter
+├── distribute()               Forward accumulated USDC to staking (permissionless)
+├── setStakingBps(bps)         Adjust staker/treasury split (owner only)
+└── setTreasury(addr)          Update treasury address (owner only)
 ```
 
 ## Item Lifecycle
