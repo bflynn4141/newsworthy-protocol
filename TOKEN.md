@@ -79,8 +79,8 @@ AI agents and applications query the Newsworthy feed API, paying $0.01 USDC per 
 | Contract | Address | Purpose |
 |----------|---------|---------|
 | NewsToken | [`0x2e8B...6f8bF`](https://worldchain-mainnet.explorer.alchemy.com/address/0x2e8B4cB9716db48D5AB98ed111a41daC4AE6f8bF) | ERC-20 token |
-| NewsStaking | *deploying* | Stake NEWS, earn USDC |
-| RevenueRouter | *deploying* | Routes x402 revenue to stakers |
+| NewsStaking | [`0x2644...919F`](https://worldchain-mainnet.explorer.alchemy.com/address/0x2644BbDa170c313df17AFBbb740577F37A53919F) | Stake NEWS, earn USDC |
+| RevenueRouter | [`0xC310...F130`](https://worldchain-mainnet.explorer.alchemy.com/address/0xC3100311ceDC1aD5A22DC650753dB507D399F130) | Routes x402 revenue to stakers |
 | FeedRegistryV2 | [`0xb2d5...2BBF`](https://worldchain-mainnet.explorer.alchemy.com/address/0xb2d538D2BD69a657A5240c446F0565a7F5d52BBF) | Mints NEWS on resolution |
 
 ## Staking Mechanics

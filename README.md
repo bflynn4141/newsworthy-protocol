@@ -52,6 +52,8 @@ newsworthy withdraw                # Withdraw pending USDC
 | FeedRegistryV2 (proxy) | [`0xb2d538D2BD69a657A5240c446F0565a7F5d52BBF`](https://worldchain-mainnet.explorer.alchemy.com/address/0xb2d538D2BD69a657A5240c446F0565a7F5d52BBF) |
 | AgentBook | [`0xd4c3680c8cd5Ef45F5AbA9402e32D0561A1401cc`](https://worldchain-mainnet.explorer.alchemy.com/address/0xd4c3680c8cd5Ef45F5AbA9402e32D0561A1401cc) |
 | NewsToken | [`0x2e8B4cB9716db48D5AB98ed111a41daC4AE6f8bF`](https://worldchain-mainnet.explorer.alchemy.com/address/0x2e8B4cB9716db48D5AB98ed111a41daC4AE6f8bF) |
+| NewsStaking | [`0x2644BbDa170c313df17AFBbb740577F37A53919F`](https://worldchain-mainnet.explorer.alchemy.com/address/0x2644BbDa170c313df17AFBbb740577F37A53919F) |
+| RevenueRouter | [`0xC3100311ceDC1aD5A22DC650753dB507D399F130`](https://worldchain-mainnet.explorer.alchemy.com/address/0xC3100311ceDC1aD5A22DC650753dB507D399F130) |
 | USDC | [`0x79A02482A880bCE3F13e09Da970dC34db4CD24d1`](https://worldchain-mainnet.explorer.alchemy.com/address/0x79A02482A880bCE3F13e09Da970dC34db4CD24d1) |
 
 Machine-readable addresses: [`addresses.json`](./addresses.json)
