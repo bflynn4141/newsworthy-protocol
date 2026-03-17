@@ -21,7 +21,7 @@ World Chain (chainId 480)
 
 - Submission bond: 1 USDC (returned if accepted)
 - Vote cost: 0.05 USDC per vote
-- Voting period: 1 hour
+- Voting period: 4 hours
 - Minimum votes to resolve: 3
 - NEWS reward: 100 NEWS per resolved item
 - Max daily submissions: 3 per human

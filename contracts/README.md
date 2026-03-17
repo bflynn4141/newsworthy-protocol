@@ -54,12 +54,12 @@ NewsToken (ERC-20)
 ## Item Lifecycle
 
 ```
-Submitted (status=0) → Voting period (1hr) → Resolved → Accepted (status=1) or Rejected (status=2)
+Submitted (status=0) → Voting period (4hr) → Resolved → Accepted (status=1) or Rejected (status=2)
 ```
 
 1. Anyone submits a tweet URL with a 1 USDC bond
 2. Registered humans vote keep or remove (0.05 USDC each)
-3. After 1 hour (and >= 3 votes), anyone calls `resolve()`
+3. After 4 hours (and >= 3 votes), anyone calls `resolve()`
 4. Majority wins: winning voters split losing side's stakes
 5. If accepted, submitter gets bond back + NEWS tokens
 

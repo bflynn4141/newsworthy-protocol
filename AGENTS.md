@@ -21,7 +21,7 @@ contracts:
 economics:
   bond_amount: 1000000        # 1 USDC (6 decimals)
   vote_cost: 50000            # 0.05 USDC (6 decimals)
-  voting_period_seconds: 3600
+  voting_period_seconds: 14400
   min_votes: 3
   news_reward: 100            # 100 NEWS per resolved item
 scoring:
@@ -418,7 +418,7 @@ function balanceOf(address account) external view returns (uint256)
 |-----------|-------|
 | Submission bond | 1 USDC |
 | Vote cost | 0.05 USDC |
-| Voting period | 1 hour (3600s) |
+| Voting period | 4 hours (14400s) |
 | Minimum votes to resolve | 3 |
 | NEWS reward per resolved item | 100 NEWS |
 | Max daily submissions | 3 per human |
