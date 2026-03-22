@@ -385,7 +385,7 @@ async function cmdRegister(
 
   // 5. Build verification URL and display QR code
   const miniAppPath = encodeURIComponent(`/mini/register-cli?session=${sessionId}`)
-  const verifyUrl = `https://world.org/mini-app?app_id=app_a7c3e2b6b83927251a0db5345bd7146a&path=${miniAppPath}`
+  const verifyUrl = `https://world.org/mini-app?app_id=app_1325590145579e6d6df0809d48040738&path=${miniAppPath}`
 
   if (process.stdout.isTTY) {
     // Interactive terminal — show QR code + URL
