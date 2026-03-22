@@ -93,7 +93,7 @@ const API_BASE = process.env['NEWSWORTHY_API_URL'] ?? 'https://newsworthy-api.bf
 const DEFAULT_ADDRESSES = {
   chainId: 480,
   feedRegistry: '0xb2d538D2BD69a657A5240c446F0565a7F5d52BBF' as const,
-  agentBook: '0xd4c3680c8cd5Ef45F5AbA9402e32D0561A1401cc' as const,
+  agentBook: '0xA23aB2712eA7BBa896930544C7d6636a96b944dA' as const,
   newsToken: '0x2e8B4cB9716db48D5AB98ed111a41daC4AE6f8bF' as const,
   usdc: '0x79A02482A880bCE3F13e09Da970dC34db4CD24d1' as const,
   rpc: 'https://worldchain-mainnet.g.alchemy.com/public',
@@ -385,7 +385,7 @@ async function cmdRegister(
 
   // 5. Build verification URL and display QR code
   const miniAppPath = encodeURIComponent(`/mini/register-cli?session=${sessionId}`)
-  const verifyUrl = `https://world.org/mini-app?app_id=app_1325590145579e6d6df0809d48040738&path=${miniAppPath}`
+  const verifyUrl = `https://world.org/mini-app?app_id=app_a7c3e2b6b83927251a0db5345bd7146a&path=${miniAppPath}`
 
   if (process.stdout.isTTY) {
     // Interactive terminal — show QR code + URL

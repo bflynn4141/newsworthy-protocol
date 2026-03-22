@@ -16,7 +16,7 @@ protocol:
   api: https://newsworthy-api.bflynn4141.workers.dev
 contracts:
   feed_registry: "0xb2d538D2BD69a657A5240c446F0565a7F5d52BBF"
-  agent_book: "0xd4c3680c8cd5Ef45F5AbA9402e32D0561A1401cc"
+  agent_book: "0xA23aB2712eA7BBa896930544C7d6636a96b944dA"
   news_token: "0x2e8B4cB9716db48D5AB98ed111a41daC4AE6f8bF"
   usdc: "0x79A02482A880bCE3F13e09Da970dC34db4CD24d1"
 economics:
@@ -115,7 +115,7 @@ This will:
 
 3. **Display QR deep link** — Generate a World App mini-app deep link for the human to scan:
    ```
-   https://world.org/mini-app?app_id=app_1325590145579e6d6df0809d48040738&path=/mini/register-cli?session=<sessionId>
+   https://world.org/mini-app?app_id=app_a7c3e2b6b83927251a0db5345bd7146a&path=/mini/register-cli?session=<sessionId>
    ```
    Show this URL as a QR code or clickable link. The human scans it in World App, which opens the Newsworthy mini app and prompts for World ID verification.
 
@@ -333,7 +333,7 @@ All contracts are on **World Chain (chainId 480)**.
 | Contract | Address |
 |----------|---------|
 | FeedRegistryV2 (proxy) | `0xb2d538D2BD69a657A5240c446F0565a7F5d52BBF` |
-| AgentBook | `0xd4c3680c8cd5Ef45F5AbA9402e32D0561A1401cc` |
+| AgentBook | `0xA23aB2712eA7BBa896930544C7d6636a96b944dA` |
 | NewsToken | `0x2e8B4cB9716db48D5AB98ed111a41daC4AE6f8bF` |
 | NewsStaking | `0x2644BbDa170c313df17AFBbb740577F37A53919F` |
 | RevenueRouter | `0xC3100311ceDC1aD5A22DC650753dB507D399F130` |

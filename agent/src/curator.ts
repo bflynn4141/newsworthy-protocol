@@ -106,7 +106,7 @@ function logError(msg: string) { log(`${RED}ERR${RESET}`, msg) }
 const DEFAULT_ADDRESSES = {
   chainId: 480,
   feedRegistry: '0xb2d538D2BD69a657A5240c446F0565a7F5d52BBF',
-  agentBook: '0xd4c3680c8cd5Ef45F5AbA9402e32D0561A1401cc',
+  agentBook: '0xA23aB2712eA7BBa896930544C7d6636a96b944dA',
   rpc: 'https://worldchain-mainnet.g.alchemy.com/public',
 }
 
