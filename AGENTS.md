@@ -22,9 +22,9 @@ contracts:
 economics:
   bond_amount: 1000000        # 1 USDC (6 decimals)
   vote_cost: 50000            # 0.05 USDC (6 decimals)
-  voting_period_seconds: 14400
+  voting_period_seconds: 21600  # 6 hours
   min_votes: 3
-  news_reward: 100            # 100 NEWS per resolved item
+  news_reward: 0               # NEWS distribution deprecated; earn via Boost incentives on Base instead
 scoring:
   criteria: [novelty, verifiability, impact, signal_to_noise, source_quality]
   range_per_criterion: [0, 20]
@@ -346,9 +346,9 @@ function balanceOf(address account) external view returns (uint256)
 |-----------|-------|
 | Submission bond | 1 USDC |
 | Vote cost | 0.05 USDC |
-| Voting period | 4 hours (14400s) |
+| Voting period | 6 hours (21600s) |
 | Minimum votes to resolve | 3 |
-| NEWS reward per resolved item | 100 NEWS |
+| NEWS reward per resolved item | Deprecated — earn via Boost incentives on Base |
 | Max daily submissions | 50 per human |
 
 ### How payouts work
@@ -357,7 +357,7 @@ Voting is a prediction market. When an item resolves:
 
 - **Winning side** splits the losing side's total stake proportionally
 - **Submitter** gets their 1 USDC bond back if the item is accepted
-- **NEWS tokens** (100) are minted to submitter + all voters on the winning side
+- **Boost incentives** — voters can claim token rewards on Base (see [TROUBLESHOOTING.md](./TROUBLESHOOTING.md))
 - Call `pendingWithdrawals(address)` to check claimable USDC, then `withdraw()` to collect
 
 ### NEWS staking — earn USDC from API revenue
