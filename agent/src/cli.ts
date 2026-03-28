@@ -2,8 +2,8 @@
 // Newsworthy CLI — interact with FeedRegistry + AgentBook on World Chain
 //
 // Usage:
-//   newsworthy [--test] <command> [args...]
-//   npx newsworthy-cli [--test] <command> [args...]
+//   bun run agent/src/cli.ts [--test] <command> [args...]
+//   node --import tsx agent/src/cli.ts [--test] <command> [args...]
 //
 // Commands (read):
 //   status          Registry overview: bond, periods, deployer balance
@@ -14,7 +14,6 @@
 //   dashboard       Live TUI dashboard (auto-refreshing, requires Node)
 //
 // Commands (write — costs gas):
-//   approve                 Max-approve USDC for the registry (one-shot)
 //   submit <url> [meta]     Submit news item with bond
 //   vote <id> <keep|remove> Vote on a voting item
 //   resolve <id>            Resolve an item after voting period
@@ -23,6 +22,7 @@
 //
 // Flags:
 //   --test    Use test contracts (MockAgentBook, relaxed params)
+//   --skip-verify  Skip tweet existence check (use if oEmbed is down)
 
 import { performance } from 'node:perf_hooks'
 import { parseArgs } from 'node:util'
@@ -34,9 +34,11 @@ setInterval(() => {
   performance.clearMarks()
   performance.clearMeasures()
 }, 30_000)
-import { readFile } from 'node:fs/promises'
+import { readFile, stat } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
-import { resolve as pathResolve, dirname } from 'node:path'
+import { homedir } from 'node:os'
+import { join } from 'node:path'
+import { existsSync } from 'node:fs'
 import {
   createPublicClient,
   createWalletClient,
@@ -87,17 +89,7 @@ const DIM = '\x1b[90m'
 const GREEN = '\x1b[32m'
 const RED = '\x1b[31m'
 
-const API_BASE = process.env['NEWSWORTHY_API_URL'] ?? 'https://newsworthy-api.bflynn4141.workers.dev'
-
-// ── Bundled addresses (from addresses.json in repo root) ────────────────────
-const DEFAULT_ADDRESSES = {
-  chainId: 480,
-  feedRegistry: '0xb2d538D2BD69a657A5240c446F0565a7F5d52BBF' as const,
-  agentBook: '0xA23aB2712eA7BBa896930544C7d6636a96b944dA' as const,
-  newsToken: '0x2e8B4cB9716db48D5AB98ed111a41daC4AE6f8bF' as const,
-  usdc: '0x79A02482A880bCE3F13e09Da970dC34db4CD24d1' as const,
-  rpc: 'https://worldchain-mainnet.g.alchemy.com/public',
-}
+const API_BASE = 'https://api.newsworthycli.com'
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -133,60 +125,79 @@ function die(msg: string): never {
 
 // ── Load config ─────────────────────────────────────────────────────────────
 
-async function loadDeployment(_test: boolean): Promise<Deployment> {
-  // Try loading from addresses.json in repo root (for dev), or fall back to bundled defaults
-  const rpc = process.env['NEWSWORTHY_RPC_URL'] ?? DEFAULT_ADDRESSES.rpc
-  const key = process.env['NEWSWORTHY_PRIVATE_KEY']
+// Embedded mainnet config — used when deployment JSON is missing (global npm install)
+const MAINNET_DEPLOYMENT: Deployment = {
+  chainId: 480,
+  rpc: process.env.NEWSWORTHY_RPC_URL || 'https://worldchain-mainnet.g.alchemy.com/public',
+  deployer: '', // will be derived from private key
+  contracts: {
+    AgentBook: { address: '0xA23aB2712eA7BBa896930544C7d6636a96b944dA' },
+    FeedRegistry: { address: '0xb2d538D2BD69a657A5240c446F0565a7F5d52BBF' },
+  },
+}
 
-  // Try to find addresses.json relative to this file (handles both src/ and dist/)
-  let addresses = DEFAULT_ADDRESSES
+async function loadDeployment(test: boolean): Promise<Deployment> {
+  const filename = test ? 'worldchain-test.json' : 'worldchain-mainnet.json'
+  const filePath = fileURLToPath(new URL(`../../contracts/deployments/${filename}`, import.meta.url))
   try {
-    const thisDir = dirname(fileURLToPath(import.meta.url))
-    const addrPath = pathResolve(thisDir, '../../addresses.json')
-    const text = await readFile(addrPath, 'utf-8')
-    const parsed = JSON.parse(text) as Record<string, typeof DEFAULT_ADDRESSES>
-    const mainnet = parsed['worldchain-mainnet']
-    if (mainnet) addresses = mainnet
+    const text = await readFile(filePath, 'utf-8')
+    return JSON.parse(text) as Deployment
   } catch {
-    // Use bundled defaults
-  }
-
-  // Derive deployer address from private key if available
-  let deployer = '0x0000000000000000000000000000000000000000'
-  if (key) {
-    const account = privateKeyToAccount(key as `0x${string}`)
-    deployer = account.address
-  }
-
-  return {
-    chainId: addresses.chainId,
-    rpc,
-    deployer,
-    contracts: {
-      AgentBook: { address: addresses.agentBook },
-      FeedRegistry: { address: addresses.feedRegistry },
-    },
+    if (test) die('Test deployment file not found: contracts/deployments/worldchain-test.json')
+    // Global install — use embedded mainnet config
+    return { ...MAINNET_DEPLOYMENT }
   }
 }
 
-async function loadPrivateKey(): Promise<`0x${string}`> {
-  // 1. Environment variable (preferred)
-  const envKey = process.env['NEWSWORTHY_PRIVATE_KEY']
-  if (envKey) {
-    if (!envKey.startsWith('0x')) return `0x${envKey}` as `0x${string}`
-    return envKey as `0x${string}`
+const HEX_KEY_RE = /^(0x)?[0-9a-fA-F]{64}$/
+
+function normalizeKey(raw: string, source: string): `0x${string}` {
+  const k = raw.trim()
+  if (!HEX_KEY_RE.test(k)) {
+    die(`Invalid private key from ${source} (expected 32-byte hex string)`)
+  }
+  if (!k.startsWith('0x')) return `0x${k}` as `0x${string}`
+  return k as `0x${string}`
+}
+
+const KEY_NOT_FOUND_MSG =
+  'No private key found. Set one of:\n' +
+  '  1. NEWSWORTHY_PRIVATE_KEY environment variable\n' +
+  '  2. ~/.newsworthy/agent.key file\n' +
+  '  3. .secrets/deployer.key (when running from repo)'
+
+/** Try to load private key from all sources. Returns null if none found. */
+async function tryLoadPrivateKey(): Promise<`0x${string}` | null> {
+  // 1. Environment variable (documented in agents.md)
+  const envKey = process.env.NEWSWORTHY_PRIVATE_KEY?.trim()
+  if (envKey) return normalizeKey(envKey, 'NEWSWORTHY_PRIVATE_KEY env var')
+
+  // 2. ~/.newsworthy/agent.key (agents.md tells users to create this)
+  const homeKeyPath = join(homedir(), '.newsworthy', 'agent.key')
+  try {
+    const homeKey = (await readFile(homeKeyPath, 'utf-8')).trim()
+    if (homeKey) return normalizeKey(homeKey, homeKeyPath)
+  } catch { /* not found, try next */ }
+
+  // 3. .secrets/deployer.key — only when running from a git repo (dev mode)
+  //    Resolved from cwd, NOT import.meta.url, to prevent a malicious npm
+  //    package from planting a key inside node_modules.
+  const cwd = process.cwd()
+  if (existsSync(join(cwd, '.git'))) {
+    const repoKeyPath = join(cwd, '.secrets', 'deployer.key')
+    try {
+      const key = (await readFile(repoKeyPath, 'utf-8')).trim()
+      if (key) return normalizeKey(key, repoKeyPath)
+    } catch { /* not found */ }
   }
 
-  // 2. Key file at ~/.newsworthy/agent.key
-  try {
-    const homedir = process.env['HOME'] ?? process.env['USERPROFILE'] ?? '~'
-    const keyPath = pathResolve(homedir, '.newsworthy', 'agent.key')
-    const key = (await readFile(keyPath, 'utf-8')).trim()
-    if (!key.startsWith('0x')) return `0x${key}` as `0x${string}`
-    return key as `0x${string}`
-  } catch {
-    die('No private key found. Set NEWSWORTHY_PRIVATE_KEY env var or create ~/.newsworthy/agent.key')
-  }
+  return null
+}
+
+async function loadPrivateKey(): Promise<`0x${string}`> {
+  const key = await tryLoadPrivateKey()
+  if (!key) die(KEY_NOT_FOUND_MSG)
+  return key
 }
 
 async function getWalletClient(rpcUrl: string) {
@@ -198,7 +209,7 @@ async function getWalletClient(rpcUrl: string) {
 // ── Commands ────────────────────────────────────────────────────────────────
 
 async function cmdStatus(
-  deployment: Deployment,
+  deployer: Address,
   client: PublicClient,
   registryAddr: Address,
   agentBookAddr: Address,
@@ -209,12 +220,12 @@ async function cmdStatus(
     client.readContract({ address: registryAddr, abi: FEED_REGISTRY_ABI, functionName: 'minVotes' }),
     client.readContract({ address: registryAddr, abi: FEED_REGISTRY_ABI, functionName: 'voteCost' }),
     client.readContract({ address: registryAddr, abi: FEED_REGISTRY_ABI, functionName: 'nextItemId' }),
-    client.getBalance({ address: deployment.deployer as Address }),
+    client.getBalance({ address: deployer }),
   ])
 
   const humanId = await client.readContract({
     address: agentBookAddr, abi: AGENTBOOK_ABI, functionName: 'lookupHuman',
-    args: [deployment.deployer as Address],
+    args: [deployer],
   })
 
   console.log(`\n${BOLD}═══ Newsworthy Registry Status ═══${RESET}\n`)
@@ -231,18 +242,18 @@ async function cmdStatus(
     client.readContract({ address: registryAddr, abi: FEED_REGISTRY_ABI, functionName: 'newsPerItem' }) as Promise<bigint>,
     client.readContract({ address: registryAddr, abi: FEED_REGISTRY_ABI, functionName: 'maxDailySubmissions' }) as Promise<bigint>,
   ])
-  const tokenBal = await client.readContract({ address: bondTokenAddr, abi: ERC20_ABI, functionName: 'balanceOf', args: [deployment.deployer as Address] }) as bigint
-  const newsBal = await client.readContract({ address: newsTokenAddr, abi: ERC20_ABI, functionName: 'balanceOf', args: [deployment.deployer as Address] }) as bigint
+  const tokenBal = await client.readContract({ address: bondTokenAddr, abi: ERC20_ABI, functionName: 'balanceOf', args: [deployer] }) as bigint
+  const newsBal = await client.readContract({ address: newsTokenAddr, abi: ERC20_ABI, functionName: 'balanceOf', args: [deployer] }) as bigint
 
   console.log(`  Bond:             ${formatUnits(bond as bigint, tokenDecimals)} ${tokenSymbol}`)
   console.log(`  Vote cost:        ${formatUnits(voteCost as bigint, tokenDecimals)} ${tokenSymbol}`)
   console.log(`  Voting period:    ${formatDuration(Number(votingPeriod as bigint))}`)
   console.log(`  Min votes:        ${(minVotes as bigint).toString()}`)
   console.log(`  Total items:      ${(nextId as bigint).toString()}`)
-  console.log(`  Deployer:         ${DIM}${deployment.deployer}${RESET}`)
+  console.log(`  Agent:            ${DIM}${deployer}${RESET}`)
   console.log(`  $NEWS / item:     ${formatUnits(newsPerItem, 18)} $NEWS`)
   console.log(`  Daily limit:      ${maxDaily} submissions per human`)
-  console.log(`  Deployer balance: ${formatEther(balance)} ETH`)
+  console.log(`  Agent balance:    ${formatEther(balance)} ETH`)
   console.log(`  ${tokenSymbol} balance:   ${formatUnits(tokenBal, tokenDecimals)} ${tokenSymbol}`)
   console.log(`  $NEWS balance:    ${formatUnits(newsBal, 18)} $NEWS`)
   console.log(`  $NEWS token:      ${DIM}${newsTokenAddr}${RESET}`)
@@ -355,8 +366,6 @@ async function cmdRegister(
 
   // 4. Create registration session via API
   let sessionId: string
-  let sessionExpiresAt: number | null = null // epoch ms
-  const sessionCreatedAt = Date.now()
   try {
     const res = await fetch(`${API_BASE}/register/session`, {
       method: 'POST',
@@ -367,44 +376,30 @@ async function cmdRegister(
       const body = await res.text()
       die(`Failed to create registration session: ${res.status} ${body}`)
     }
-    const data = (await res.json()) as { sessionId: string; expiresAt?: string | number }
+    const data = (await res.json()) as { sessionId: string }
     sessionId = data.sessionId
-    if (data.expiresAt) {
-      sessionExpiresAt = typeof data.expiresAt === 'number'
-        ? data.expiresAt * (data.expiresAt < 1e12 ? 1000 : 1) // handle seconds vs ms
-        : new Date(data.expiresAt).getTime()
-    }
   } catch (err: any) {
     die(`Failed to create registration session: ${err?.message ?? String(err)}`)
   }
 
-  // Show session ID with expiry info
-  const sessionDeadline = sessionExpiresAt ?? (sessionCreatedAt + 15 * 60 * 1000) // fallback: 15m
-  const expiryDeltaSec = Math.max(0, Math.floor((sessionDeadline - Date.now()) / 1000))
-  console.log(`  Session: ${DIM}${sessionId}${RESET} (expires in ${formatDuration(expiryDeltaSec)})\n`)
+  console.log(`  Session: ${DIM}${sessionId}${RESET}\n`)
 
   // 5. Build verification URL and display QR code
   const miniAppPath = encodeURIComponent(`/mini/register-cli?session=${sessionId}`)
-  const verifyUrl = `https://world.org/mini-app?app_id=app_1325590145579e6d6df0809d48040738&path=${miniAppPath}`
+  const verifyUrl = `https://world.org/mini-app?app_id=app_a7c3e2b6b83927251a0db5345bd7146a&path=${miniAppPath}`
 
-  if (process.stdout.isTTY) {
-    // Interactive terminal — show QR code + URL
-    console.log(`  ${BOLD}Scan this QR code with World App to verify:${RESET}\n`)
+  console.log(`  ${BOLD}Scan this QR code with World App to verify:${RESET}\n`)
 
-    await new Promise<void>((resolve) => {
-      qrcode.generate(verifyUrl, { small: true }, (qr: string) => {
-        console.log(qr)
-        resolve()
-      })
+  // qrcode-terminal with callback to capture output
+  await new Promise<void>((resolve) => {
+    qrcode.generate(verifyUrl, { small: true }, (qr: string) => {
+      console.log(qr)
+      resolve()
     })
+  })
 
-    console.log(`\n  ${DIM}Or open this URL:${RESET}`)
-    console.log(`  ${verifyUrl}\n`)
-  } else {
-    // Non-TTY (piped, headless agent, CI) — QR codes are unreadable, just show URL
-    console.log(`  ${BOLD}Open this URL in World App to verify:${RESET}`)
-    console.log(`  ${verifyUrl}\n`)
-  }
+  console.log(`\n  ${DIM}Or open this URL:${RESET}`)
+  console.log(`  ${verifyUrl}\n`)
 
   // 6. Poll for completion (every 3s, up to 15 minutes = 300 iterations)
   const MAX_POLLS = 300
@@ -413,8 +408,7 @@ async function cmdRegister(
   let sessionData: { status: string; proofData?: { merkle_root: string; nullifier_hash: string; proof: string } } | null = null
 
   for (let poll = 1; poll <= MAX_POLLS; poll++) {
-    const remainingSec = Math.max(0, Math.floor((sessionDeadline - Date.now()) / 1000))
-    process.stdout.write(`\r  ⏳ Waiting for World ID verification... (${formatDuration(remainingSec)} remaining)   `)
+    process.stdout.write(`\r  ⏳ Waiting for World ID verification... (poll ${poll}/${MAX_POLLS})`)
 
     try {
       const res = await fetch(`${API_BASE}/register/session/${sessionId}`)
@@ -423,7 +417,7 @@ async function cmdRegister(
         await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS))
         continue
       }
-      sessionData = (await res.json()) as { status: string; proofData?: { merkle_root: string; nullifier_hash: string; proof: string } }
+      sessionData = (await res.json()) as { status: string; proofData?: string }
 
       if (sessionData.status === 'completed') {
         process.stdout.write('\r' + ' '.repeat(80) + '\r') // clear the polling line
@@ -442,16 +436,14 @@ async function cmdRegister(
     die('Session expired. Run `register` again.')
   }
 
-  const completedSession = sessionData as { status: string; proofData?: { merkle_root: string; nullifier_hash: string; proof: string } }
-
-  if (!completedSession.proofData) {
+  if (!sessionData.proofData) {
     die('Session completed but no proof data received.')
   }
 
   // 7. Parse proof and submit on-chain registration
   console.log(`  ${BOLD}Submitting on-chain registration...${RESET}`)
 
-  const proofData = completedSession.proofData!
+  const proofData = sessionData.proofData!
 
   // Decode the ABI-encoded uint256[8] proof
   const [decodedProof] = decodeAbiParameters(
@@ -491,8 +483,18 @@ async function cmdRegister(
 
 async function cmdSubmit(
   client: PublicClient, rpcUrl: string, registryAddr: Address,
-  url: string, metadataHash: string,
+  url: string, metadataHash: string, skipVerify = false,
 ) {
+  // Verify tweet exists before spending gas
+  if (!skipVerify) {
+    const { verifyTweetExists } = await import('./verify-url.js')
+    const result = await verifyTweetExists(url)
+    if (!result.valid) {
+      die(`Tweet does not exist: ${result.reason}\n  Use --skip-verify to bypass.`)
+    }
+    console.log(`\x1b[32m✓\x1b[0m Tweet verified${result.title ? `: ${result.title}` : ''}`)
+  }
+
   const walletClient = await getWalletClient(rpcUrl)
 
   const [bond, bondToken] = await Promise.all([
@@ -530,26 +532,7 @@ async function cmdVote(
 ) {
   const walletClient = await getWalletClient(rpcUrl)
 
-  const [voteCost, bondToken] = await Promise.all([
-    client.readContract({ address: registryAddr, abi: FEED_REGISTRY_ABI, functionName: 'voteCost' }) as Promise<bigint>,
-    client.readContract({ address: registryAddr, abi: FEED_REGISTRY_ABI, functionName: 'bondToken' }) as Promise<Address>,
-  ])
-
-  // Ensure approval
-  const allowance = await client.readContract({
-    address: bondToken, abi: ERC20_ABI, functionName: 'allowance',
-    args: [walletClient.account!.address, registryAddr],
-  }) as bigint
-  if (allowance < voteCost) {
-    console.log(`Approving USDC for registry...`)
-    await walletClient.writeContract({
-      address: bondToken, abi: ERC20_ABI, functionName: 'approve',
-      args: [registryAddr, 2n ** 256n - 1n],
-    })
-  }
-
   console.log(`\nVoting ${support ? '\x1b[32mKEEP\x1b[0m' : '\x1b[31mREMOVE\x1b[0m'} on item #${itemId}`)
-  console.log(`Vote cost: ${formatUnits(voteCost, 6)} USDC`)
 
   const hash = await walletClient.writeContract({
     address: registryAddr, abi: FEED_REGISTRY_ABI, functionName: 'vote',
@@ -557,43 +540,6 @@ async function cmdVote(
   })
 
   console.log(`\x1b[32m✓\x1b[0m Vote cast: ${txLink(hash)}\n`)
-}
-
-async function cmdApprove(
-  client: PublicClient, rpcUrl: string, registryAddr: Address,
-) {
-  const walletClient = await getWalletClient(rpcUrl)
-
-  const bondToken = await client.readContract({
-    address: registryAddr, abi: FEED_REGISTRY_ABI, functionName: 'bondToken',
-  }) as Address
-
-  const [tokenSymbol, tokenDecimals] = await Promise.all([
-    client.readContract({ address: bondToken, abi: ERC20_ABI, functionName: 'symbol' }) as Promise<string>,
-    client.readContract({ address: bondToken, abi: ERC20_ABI, functionName: 'decimals' }) as Promise<number>,
-  ])
-
-  const allowance = await client.readContract({
-    address: bondToken, abi: ERC20_ABI, functionName: 'allowance',
-    args: [walletClient.account!.address, registryAddr],
-  }) as bigint
-
-  // Consider "already approved" if allowance > 1000 tokens (generous threshold)
-  const threshold = BigInt(1000) * (10n ** BigInt(tokenDecimals))
-  if (allowance >= threshold) {
-    console.log(`\n${GREEN}Already approved${RESET} — current allowance: ${formatUnits(allowance, tokenDecimals)} ${tokenSymbol}\n`)
-    return
-  }
-
-  console.log(`\nApproving ${tokenSymbol} for FeedRegistry...`)
-  console.log(`Current allowance: ${formatUnits(allowance, tokenDecimals)} ${tokenSymbol}`)
-
-  const hash = await walletClient.writeContract({
-    address: bondToken, abi: ERC20_ABI, functionName: 'approve',
-    args: [registryAddr, 2n ** 256n - 1n],
-  })
-
-  console.log(`\x1b[32m✓\x1b[0m Max approval set: ${txLink(hash)}\n`)
 }
 
 async function cmdResolve(
@@ -705,13 +651,14 @@ async function cmdLeaderboard(
 // ── Main ────────────────────────────────────────────────────────────────────
 
 async function main() {
-  const argv = typeof (globalThis as any).Bun !== 'undefined' ? (globalThis as any).Bun.argv.slice(2) : process.argv.slice(2)
+  const argv = typeof globalThis.Bun !== 'undefined' ? Bun.argv.slice(2) : process.argv.slice(2)
   const { values, positionals } = parseArgs({
     args: argv,
     options: {
       test: { type: 'boolean', default: false },
       help: { type: 'boolean', short: 'h', default: false },
       refresh: { type: 'string', default: '5' },
+      'skip-verify': { type: 'boolean', default: false },
     },
     allowPositionals: true,
   })
@@ -721,8 +668,8 @@ async function main() {
 ${BOLD}Newsworthy CLI${RESET} — FeedRegistry on World Chain
 
 ${BOLD}Usage:${RESET}
-  newsworthy [--test] <command>                    (CLI commands)
-  newsworthy dashboard [--test]                    (interactive TUI)
+  bun run agent/src/cli.ts [--test] <command>     (CLI commands)
+  bun run dashboard -- [--test]                    (interactive TUI)
 
 ${BOLD}Read commands:${RESET}
   status              Registry overview
@@ -733,15 +680,21 @@ ${BOLD}Read commands:${RESET}
   dashboard           Live TUI dashboard (auto-refreshing)
 
 ${BOLD}Write commands:${RESET} (costs gas)
-  approve             Max-approve USDC for the registry (one-shot)
-  submit <url> [meta] Submit item with bond
+  submit <url> [meta] Submit item with bond (verifies tweet exists first)
   vote <id> <keep|remove>  Vote on a voting item
   resolve <id>        Resolve an item after voting period
   claim <id>          Claim voter rewards for a resolved item
   withdraw            Claim pending USDC rewards
 
+${BOLD}Autonomous:${RESET}
+  heartbeat           Auto-vote on pending items every hour (long-running)
+                      Uses LLM scoring to evaluate items. Also resolves
+                      expired votes and claims payouts. Requires:
+                      NEWSWORTHY_LLM_URL + NEWSWORTHY_LLM_KEY env vars.
+
 ${BOLD}Flags:${RESET}
   --test              Use test contracts (MockAgentBook, 60s periods)
+  --skip-verify       Skip tweet existence check before submit
   --refresh <sec>     Dashboard refresh interval (default: 5)
 `)
     return
@@ -752,22 +705,37 @@ ${BOLD}Flags:${RESET}
   const rpcUrl = deployment.rpc
   const writeRpcUrl = deployment.writeRpc ?? rpcUrl
 
-  // Cast to generic PublicClient to avoid OP Stack transaction type mismatches
   const client = createPublicClient({
     chain: worldchain,
     transport: http(rpcUrl),
-  }) as PublicClient
+  })
 
   const registryAddr = deployment.contracts.FeedRegistry.address as Address
   const agentBookAddr = deployment.contracts.AgentBook.address as Address
-  const deployer = deployment.deployer as Address
 
+  // Derive deployer address from private key (not from deployment JSON)
+  // This ensures the user's own address is used, not the protocol deployer's
+  let deployer: Address
   const command = positionals[0]
+  const needsKey = ['status', 'register', 'submit', 'vote', 'resolve', 'claim', 'withdraw', 'dashboard', 'heartbeat'].includes(command)
+  const key = await tryLoadPrivateKey()
+  if (key) {
+    try {
+      deployer = privateKeyToAccount(key).address
+    } catch {
+      die('Failed to derive address from private key — key may be corrupt or invalid')
+    }
+  } else if (needsKey) {
+    die(KEY_NOT_FOUND_MSG)
+  } else {
+    // Read-only commands (items, item, leaderboard) — no key needed
+    deployer = (deployment.deployer || '0x0000000000000000000000000000000000000000') as Address
+  }
 
   try {
     switch (command) {
       case 'status':
-        await cmdStatus(deployment, client, registryAddr, agentBookAddr)
+        await cmdStatus(deployer, client, registryAddr, agentBookAddr)
         break
 
       case 'items':
@@ -789,15 +757,11 @@ ${BOLD}Flags:${RESET}
         await cmdRegister(client, agentBookAddr, deployer, writeRpcUrl, isTest)
         break
 
-      case 'approve':
-        await cmdApprove(client, writeRpcUrl, registryAddr)
-        break
-
       case 'submit': {
         const url = positionals[1]
         if (!url) die('Usage: submit <url> [metadataHash]')
         const meta = positionals[2] ?? ''
-        await cmdSubmit(client, writeRpcUrl, registryAddr, url, meta)
+        await cmdSubmit(client, writeRpcUrl, registryAddr, url, meta, values['skip-verify'] ?? false)
         break
       }
 
@@ -828,6 +792,20 @@ ${BOLD}Flags:${RESET}
         await cmdWithdraw(client, writeRpcUrl, registryAddr, deployer)
         break
 
+      case 'heartbeat': {
+        const { runCuratorLoop } = await import('./curator.js')
+        const HOUR_MS = 60 * 60 * 1000
+        console.log(`\n${BOLD}Starting heartbeat — auto-voting every hour${RESET}\n`)
+        await runCuratorLoop({
+          voteThreshold: 5.0,
+          autoResolve: true,
+          autoClaim: true,
+          dryRun: false,
+          pollIntervalMs: HOUR_MS,
+        }, isTest)
+        return // never returns — long-running loop
+      }
+
       case 'dashboard': {
         const { render } = await import('ink')
         const { createElement } = await import('react')
@@ -854,36 +832,16 @@ ${BOLD}Flags:${RESET}
         die(`Unknown command: ${command}. Run with --help to see available commands.`)
     }
   } catch (err: any) {
-    // Viem puts custom error info at err.data.errorName or err.cause.data.errorName
-    const errorName = err?.data?.errorName ?? err?.cause?.data?.errorName
-
+    const errorName = err?.cause?.data?.errorName
     if (errorName) {
-      const friendlyMessages: Record<string, string> = {
-        AlreadyVoted: 'You already voted on this item',
-        NotRegistered: "Your wallet is not registered in AgentBook. Run 'newsworthy register' first",
-        VotingPeriodExpired: 'Voting period has ended for this item',
-        VotingPeriodActive: 'Voting period is still active, cannot resolve yet',
-        DailyLimitReached: 'Daily submission limit reached (max 3 per human per day)',
-        SelfVote: 'Cannot vote on your own submission',
-        InvalidItemStatus: 'Item is not in the correct status for this action',
-        NothingToWithdraw: 'No pending USDC to withdraw',
-        AlreadyClaimed: 'Already claimed rewards for this item',
-        DuplicateUrl: 'This URL has already been submitted',
-        InvalidUrl: 'The provided URL is invalid',
-        NotAVoter: 'You did not vote on this item',
-        TransferFailed: 'USDC transfer failed — check your balance and approval',
-      }
-
-      const friendly = friendlyMessages[errorName]
-      if (friendly) {
-        die(`${friendly} (${errorName})`)
-      }
       die(`Contract reverted: ${errorName}`)
     }
-
     const reason = err?.shortMessage ?? err?.message ?? String(err)
     die(reason)
   }
+
+  // viem's HTTP transport keeps connections alive — force exit for non-dashboard commands
+  process.exit(0)
 }
 
 main()
